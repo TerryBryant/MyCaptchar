@@ -90,12 +90,12 @@ def vec2text(vec):
 #     exit()
 
 # 生成一个训练batch
-def get_next_batch(batch_size=128):
+def get_next_batch(batch_size=128, is_train=True):
     batch_x = np.zeros([batch_size, IMAGE_HEIGHT * IMAGE_WIDTH])
     batch_y = np.zeros([batch_size, MAX_CAPTCHA * CHAR_SET_LEN])
 
     for i in range(batch_size):
-        name, image = get_name_and_image()
+        name, image = get_name_and_image(is_train)
         batch_x[i, :] = (image.flatten() - 128) / 128  # 标准化
         batch_y[i, :] = text2vec(name)
     return batch_x, batch_y
@@ -174,7 +174,7 @@ def train_crack_captcha_cnn():
 
         step = 0
         while True:
-            batch_x, batch_y = get_next_batch(128)
+            batch_x, batch_y = get_next_batch(batch_size=128, is_train=True)
             _, loss_ = sess.run([optimizer, loss], feed_dict={X: batch_x,
                                                               Y: batch_y,
                                                               keep_prob: 0.5})
@@ -184,7 +184,7 @@ def train_crack_captcha_cnn():
 
             # count accuracy every 100 steps
             if step % 1000 == 0:
-                batch_x_test, batch_y_test = get_next_batch(num_test_image)
+                batch_x_test, batch_y_test = get_next_batch(batch_size=num_test_image, is_train=False)
                 acc = sess.run(accuracy, feed_dict={X: batch_x_test,
                                                     Y: batch_y_test,
                                                     keep_prob: 1.})
