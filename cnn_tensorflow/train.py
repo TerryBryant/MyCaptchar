@@ -1,6 +1,5 @@
 import tensorflow as tf
 import os
-import random
 import skimage.io as IO
 import numpy as np
 
