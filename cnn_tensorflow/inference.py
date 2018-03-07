@@ -52,5 +52,5 @@ with open("trained_model/frozen_model_10000.pb", "rb") as f:
             tmp_str = char_set[max_idx_p[0, i]]
             out_str += tmp_str
 
-        print("真实值：", img_name.split("/")[1].split(".")[0])
+        print("真实值：", img_name.split("/")[-1].split(".")[0])
         print("预测值：", out_str)
