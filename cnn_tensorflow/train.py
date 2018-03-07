@@ -102,10 +102,12 @@ def get_next_batch(batch_size=128, is_train=True):
 
 
 # 开始构建cnn
-with tf.variable_scope("input"):
-    X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WIDTH], name="x_input")
-    Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN], name="y_input")
-keep_prob = tf.placeholder(tf.float32) # dropout
+# with tf.variable_scope("input"):
+#     X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WIDTH], name="x_input")
+#     Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN], name="y_input")
+X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WIDTH])
+Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN])
+keep_prob = tf.placeholder(tf.float32, name="keep_prob")  # dropout
 
 
 def weight_variable(shape, name):
@@ -127,7 +129,7 @@ def max_pool_2x2(x, name):
 
 
 def crack_captchar_cnn(X):
-    x = tf.reshape(X, shape=[-1, IMAGE_HEIGHT, IMAGE_WIDTH, 1])
+    x = tf.reshape(X, shape=[-1, IMAGE_HEIGHT, IMAGE_WIDTH, 1], name="x_input")
 
     w_c1 = weight_variable([3, 3, 1, 32], name='w_c1')
     b_c1= weight_variable([32], name='b_c1')
@@ -160,15 +162,14 @@ def train_crack_captcha_cnn():
     loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=output, labels=Y))
     optimizer = tf.train.AdadeltaOptimizer(learning_rate=0.001).minimize(loss)
 
-    with tf.variable_scope("softmax"):
-        predict = tf.reshape(output, [-1, MAX_CAPTCHA, CHAR_SET_LEN], name="predict")
+    predict = tf.reshape(output, [-1, MAX_CAPTCHA, CHAR_SET_LEN], name="x_predict")
     max_idx_p = tf.argmax(predict, 2)
     max_idx_l = tf.argmax(tf.reshape(Y, [-1, MAX_CAPTCHA, CHAR_SET_LEN]), 2)
 
     correct_pred = tf.equal(max_idx_p, max_idx_l)
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-    output_node_names = "input/x_input,softmax/predict"
+    output_node_names = "x_input,x_predict,keep_prob"
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
@@ -191,7 +192,7 @@ def train_crack_captcha_cnn():
                 print("printing test accuracy...")
                 print("step:%s, test acc: %s" % (step, acc))
 
-                if step % 10000 == 0:
+                if step % 1000 == 0:
                     constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
                                                                                   output_node_names.split(','))
                     # Finally we serialize and dump the output graph to the filesystem
