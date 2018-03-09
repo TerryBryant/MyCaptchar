@@ -1,3 +1,5 @@
+#coding=utf8
+from __future__ import print_function
 import tensorflow as tf
 import os
 import skimage.io as IO
@@ -9,8 +11,8 @@ IMAGE_WIDTH = 66
 MAX_CAPTCHA = 4
 # CHAR_SET_LEN = 6
 
-train_set = "ss/"
-test_set = "ss_test/"
+train_set = "captcha/"
+test_set = "captcha_test/"
 # 验证码中的字符
 number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 alphabet = ['a', 'b', 'c', 'd', 'e', 'f']
@@ -28,6 +30,7 @@ global cnt_train_image, cnt_test_image
 cnt_train_image = 0
 cnt_test_image = 0
 
+
 def get_name_and_image(is_train=True):
     global cnt_train_image, cnt_test_image
     if is_train:    # 表示此时为训练集图片
@@ -44,6 +47,7 @@ def get_name_and_image(is_train=True):
         name = all_test_image[cnt_test_image].split(".")[0]
         image = IO.imread(os.path.join(test_set, all_test_image[cnt_test_image]))
         cnt_test_image += 1
+
     return name, image
 
 
@@ -68,12 +72,12 @@ def text2vec(text):
 
     return vector
 
+
 # 向量转回文本
 def vec2text(vec):
     char_pos = vec.nonzero()[0]
     text = []
     for i, c in enumerate(char_pos):
-        char_at_pos = i
         char_idx = c % CHAR_SET_LEN
         if char_idx < 10:
             char_code = char_idx + ord('0')
@@ -86,7 +90,11 @@ def vec2text(vec):
 # if __name__ == "__main__":
 #     name = text2vec("12ac")
 #     vec = vec2text(name)
+#
+#     print(name)
+#     print(vec)
 #     exit()
+
 
 # 生成一个训练batch
 def get_next_batch(batch_size=128, is_train=True):
@@ -95,15 +103,12 @@ def get_next_batch(batch_size=128, is_train=True):
 
     for i in range(batch_size):
         name, image = get_name_and_image(is_train)
-        batch_x[i, :] = (image.flatten() - 128) / 128  # 标准化
+        batch_x[i, :] = (image.flatten() - 128) / 128.0  # 标准化
         batch_y[i, :] = text2vec(name)
     return batch_x, batch_y
 
 
 # 开始构建cnn
-# with tf.variable_scope("input"):
-#     X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WIDTH], name="x_input")
-#     Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN], name="y_input")
 X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WIDTH])
 Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN])
 keep_prob = tf.placeholder(tf.float32, name="keep_prob")  # dropout
@@ -142,10 +147,16 @@ def crack_captchar_cnn(X):
     conv2 = max_pool_2x2(conv2, name='pool2')
     conv2 = tf.nn.dropout(conv2, keep_prob=keep_prob)
 
+    w_c3 = weight_variable([3, 3, 64, 128], name='w_c3')
+    b_c3 = weight_variable([128], name='b_c3')
+    conv3 = tf.nn.relu(tf.nn.bias_add(conv2d(conv2, w_c3), b_c3))
+    conv3 = max_pool_2x2(conv3, name='pool3')
+    conv3 = tf.nn.dropout(conv3, keep_prob=keep_prob)
+
     # fully connected layer
-    w_d = weight_variable([9 * 17 * 64, 1024], name='w_d')
+    w_d = weight_variable([5 * 9 * 128, 1024], name='w_d')
     b_d = weight_variable([1024], name='b_d')
-    dense = tf.reshape(conv2, [-1, w_d.get_shape().as_list()[0]])
+    dense = tf.reshape(conv3, [-1, w_d.get_shape().as_list()[0]])
     dense = tf.nn.relu(tf.add(tf.matmul(dense, w_d), b_d))
     dense = tf.nn.dropout(dense, keep_prob=keep_prob)
 
@@ -153,14 +164,20 @@ def crack_captchar_cnn(X):
     b_out = weight_variable([MAX_CAPTCHA * CHAR_SET_LEN], name='b_out')
     out = tf.add(tf.matmul(dense, w_out), b_out)
 
-    return out
+    return out[:, 0:16], out[:, 16:32], out[:, 32:48], out[:, 48:]
+
 
 def train_crack_captcha_cnn():
-    output = crack_captchar_cnn(X)
+    out1, out2, out3, out4 = crack_captchar_cnn(X)
 
-    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=output, labels=Y))
+    loss1 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out1, labels=Y[:, 0:16]))
+    loss2 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out2, labels=Y[:, 16:32]))
+    loss3 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out3, labels=Y[:, 32:48]))
+    loss4 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out4, labels=Y[:, 48:]))
+    loss = (loss1 + loss2 + loss3 + loss4) / 4.0
     optimizer = tf.train.AdadeltaOptimizer(learning_rate=0.001).minimize(loss)
 
+    output = tf.concat([out1, out2, out3, out4], axis=1)
     predict = tf.reshape(output, [-1, MAX_CAPTCHA, CHAR_SET_LEN], name="x_predict")
     max_idx_p = tf.argmax(predict, 2)
     max_idx_l = tf.argmax(tf.reshape(Y, [-1, MAX_CAPTCHA, CHAR_SET_LEN]), 2)
@@ -177,7 +194,7 @@ def train_crack_captcha_cnn():
             batch_x, batch_y = get_next_batch(batch_size=128, is_train=True)
             _, loss_ = sess.run([optimizer, loss], feed_dict={X: batch_x,
                                                               Y: batch_y,
-                                                              keep_prob: 0.5})
+                                                              keep_prob: 0.75})
 
             if step % 100 == 0:
                 print("step:%s, loss: %s" % (step, loss_))
@@ -191,7 +208,7 @@ def train_crack_captcha_cnn():
                 print("printing test accuracy...")
                 print("step:%s, test acc: %s" % (step, acc))
 
-                if step % 1000 == 0:
+                if step % 10000 == 0:
                     constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
                                                                                   output_node_names.split(','))
                     # Finally we serialize and dump the output graph to the filesystem
