@@ -5,6 +5,9 @@ import os
 import skimage.io as IO
 import numpy as np
 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 
 IMAGE_HEIGHT = 34
 IMAGE_WIDTH = 66
@@ -170,12 +173,13 @@ def crack_captchar_cnn(X):
 def train_crack_captcha_cnn():
     out1, out2, out3, out4 = crack_captchar_cnn(X)
 
-    loss1 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out1, labels=Y[:, 0:16]))
-    loss2 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out2, labels=Y[:, 16:32]))
-    loss3 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out3, labels=Y[:, 32:48]))
-    loss4 = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=out4, labels=Y[:, 48:]))
+    loss1 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out1, labels=Y[:, 0:16]))
+    loss2 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out2, labels=Y[:, 16:32]))
+    loss3 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out3, labels=Y[:, 32:48]))
+    loss4 = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out4, labels=Y[:, 48:]))
     loss = (loss1 + loss2 + loss3 + loss4) / 4.0
-    optimizer = tf.train.AdadeltaOptimizer(learning_rate=0.001).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+
 
     output = tf.concat([out1, out2, out3, out4], axis=1)
     predict = tf.reshape(output, [-1, MAX_CAPTCHA, CHAR_SET_LEN], name="x_predict")
@@ -200,7 +204,7 @@ def train_crack_captcha_cnn():
                 print("step:%s, loss: %s" % (step, loss_))
 
             # count accuracy every 100 steps
-            if step % 1000 == 0:
+            if step % 500 == 0:
                 batch_x_test, batch_y_test = get_next_batch(batch_size=num_test_image, is_train=False)
                 acc = sess.run(accuracy, feed_dict={X: batch_x_test,
                                                     Y: batch_y_test,
@@ -208,7 +212,7 @@ def train_crack_captcha_cnn():
                 print("printing test accuracy...")
                 print("step:%s, test acc: %s" % (step, acc))
 
-                if step % 10000 == 0:
+                if step % 1000 == 0:
                     constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
                                                                                   output_node_names.split(','))
                     # Finally we serialize and dump the output graph to the filesystem
