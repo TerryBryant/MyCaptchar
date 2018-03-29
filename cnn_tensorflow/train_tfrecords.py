@@ -17,7 +17,7 @@ EPOCHS = 100
 IMAGE_HEIGHT = 34
 IMAGE_WIDTH = 66
 MAX_CAPTCHA = 4
-IMAGE_CHANNELS = 3
+IMAGE_CHANNELS = 1
 
 number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 alphabet = ['a', 'b', 'c', 'd', 'e', 'f']
@@ -81,37 +81,58 @@ def training_network(X):
 
 # 用于解析tfrecords数据
 def _parse_function(proto):
-    features = {'label0': tf.FixedLenFeature([1], tf.int64),
-                'label1': tf.FixedLenFeature([1], tf.int64),
-                'label2': tf.FixedLenFeature([1], tf.int64),
-                'label3': tf.FixedLenFeature([1], tf.int64),
+    features = {'label0': tf.FixedLenFeature([], tf.int64),
+                'label1': tf.FixedLenFeature([], tf.int64),
+                'label2': tf.FixedLenFeature([], tf.int64),
+                'label3': tf.FixedLenFeature([], tf.int64),
                 'image_raw': tf.FixedLenFeature([], tf.string, default_value='')}
 
     parsed_feature = tf.parse_single_example(proto, features)
-    image = tf.image.decode_image(parsed_feature['image_raw'], channels=IMAGE_CHANNELS)
-    # image = parsed_feature['image_raw']
+    image = tf.decode_raw(parsed_feature['image_raw'], tf.uint8)  # 注意是tf.uint8，与制作tfrecords时的方式对应
+    image = tf.reshape(image, [IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS])
+    image = tf.cast(image, dtype=tf.float32)  # 像素值需转换为float，后面送入卷积层参与计算
 
 
-    # label = tf.expand_dims(tf.constant([parsed_feature['label0'], parsed_feature['label1'],
-    #                                     parsed_feature['label2'], parsed_feature['label3']]), 1)
-    # index = tf.expand_dims(tf.range(MAX_CAPTCHA), 1)
-    # concated = tf.concat([index, label], axis=1)
-    # image_label = tf.sparse_to_dense(concated, [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
+
+    # # 这里tf.cast(parsed_feature['label0'], tf.int32)得到的是tensor，放在list里面无法进行one_hot
+    # image_label = [0] * MAX_CAPTCHA
+    # image_label[0] = tf.cast(parsed_feature['label0'], tf.int32)
+    # image_label[1] = tf.cast(parsed_feature['label1'], tf.int32)
+    # image_label[2] = tf.cast(parsed_feature['label2'], tf.int32)
+    # image_label[3] = tf.cast(parsed_feature['label3'], tf.int32)
+    # image_label = tf.one_hot(image_label, depth=CHAR_SET_LEN)
+
+    image_label0 = tf.cast(parsed_feature['label0'], tf.int32)
+    image_label1 = tf.cast(parsed_feature['label1'], tf.int32)
+    image_label2 = tf.cast(parsed_feature['label2'], tf.int32)
+    image_label3 = tf.cast(parsed_feature['label3'], tf.int32)
 
 
-    image_label0 = tf.sparse_to_dense(parsed_feature['label0'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
-    image_label1 = tf.sparse_to_dense(parsed_feature['label1'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
-    image_label2 = tf.sparse_to_dense(parsed_feature['label2'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
-    image_label3 = tf.sparse_to_dense(parsed_feature['label3'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
-    image_label = tf.concat([image_label0, image_label1, image_label2, image_label3], axis=1)
+    image_label0 = tf.one_hot(image_label0, depth=CHAR_SET_LEN, axis=0)  # axis=1很重要，决定了返回值是行向量还是列向量
+    # image_label1 = tf.one_hot(image_label1, depth=CHAR_SET_LEN, axis=1)
+    # image_label2 = tf.one_hot(image_label2, depth=CHAR_SET_LEN, axis=1)
+    # image_label3 = tf.one_hot(image_label3, depth=CHAR_SET_LEN, axis=1)
 
-    return image, image_label
+
+    # image_label = tf.concat([image_label0, image_label1, image_label2, image_label3], axis=0)
+
+
+
+    # image_label0 = tf.sparse_to_dense(parsed_feature['label0'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
+    # image_label1 = tf.sparse_to_dense(parsed_feature['label1'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
+    # image_label2 = tf.sparse_to_dense(parsed_feature['label2'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
+    # image_label3 = tf.sparse_to_dense(parsed_feature['label3'], [MAX_CAPTCHA, CHAR_SET_LEN], 1, 0)
+    # image_label = tf.concat([image_label0, image_label1, image_label2, image_label3], axis=1)
+
+    return image, image_label0
 
 
 def train_captcha_cnn():
     # 读取tfrecords数据
-    dataset = tf.data.TFRecordDataset(filenames)
-    dataset = dataset.map(_parse_function, num_parallel_calls=16).repeat(EPOCHS).batch(BATCH_SIZE)
+    #dataset = tf.data.TFRecordDataset(filenames)
+    dataset = tf.data.TFRecordDataset("captcha_train.tfrecords")
+    dataset = dataset.map(_parse_function, num_parallel_calls=16).shuffle(buffer_size=10000)
+    dataset = dataset.batch(2).repeat(EPOCHS)
     iter = dataset.make_initializable_iterator()
     X, Y = iter.get_next()
 
@@ -144,24 +165,26 @@ def train_captcha_cnn():
         # 训练EPOCHS轮
         global_step = 0
         for epoch in range(EPOCHS):
-            sess.run(iter.initializer, feed_dict={filenames: train_set})
+            #sess.run(iter.initializer, feed_dict={filenames: train_set})
+            sess.run(iter.initializer)
             while True:
                 try:
                     global_step += 1
                     sess.run([X, Y])
 
-                    print(Y)
+                    print(Y.eval())
+
                     exit()
-                    #_, loss_ = sess.run([optimizer, loss], feed_dict={keep_prob: 0.75})
-                    #print("当前epoch：%d，训练步数：%d，损失率：%f" % (epoch, global_step, loss_))
+                    # _, loss_ = sess.run([optimizer, loss], feed_dict={keep_prob: 0.75})
+                    # print("当前epoch：%d，训练步数：%d，损失率：%f" % (epoch, global_step, loss_))
                 except tf.errors.OutOfRangeError:
                     break
 
             # 一个epoch跑完，计算此时的验证集的准确率
             sess.run(iter.initializer, feed_dict={filenames: valid_set})
             sess.run([X, Y])
-            #acc = sess.run(accuracy, feed_dict={keep_prob: 1.})
-            #print("当前epoch：%d，测试集准确率：%f" % (epoch, acc))
+            # acc = sess.run(accuracy, feed_dict={keep_prob: 1.})
+            # print("当前epoch：%d，测试集准确率：%f" % (epoch, acc))
 
             # 每个epoch保存一次模型
             constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
