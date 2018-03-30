@@ -1,3 +1,4 @@
+# 该文件用于生成验证码数据集，并对验证码转成灰度图（彩图对cnn意义不大），最后将其保存
 from captcha.image import ImageCaptcha
 import matplotlib.pyplot as plt
 import cv2
