@@ -1,27 +1,27 @@
+# 本脚本用于产生tfrecords文件
+# 输入训练集文件路径，并根据TRAIN_VAL_RATIO设置训练集和验证集的比例，
+# 得到相应的train.tfrecords和val.tfrecords
 import tensorflow as tf
-import numpy as np
 import os
 import skimage.io as io
 
-IMAGE_HEIGHT = 34
-IMAGE_WIDTH = 66
-MAX_CAPTCHA = 4    # 处理四位字符的验证码
+TRAIN_VAL_RATIO = 10  # 训练集与验证集的比例
+MAX_CAPTCHA = 4  # 验证码长度为4
+
+# # 验证码中的字符
+# number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+# alphabet = ['a', 'b', 'c', 'd', 'e', 'f']
+#
+# char_set = number + alphabet
+# CHAR_SET_LEN = len(char_set)
 
 
-# 验证码中的字符
-number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-alphabet = ['a', 'b', 'c', 'd', 'e', 'f']
-
-char_set = number + alphabet
-CHAR_SET_LEN = len(char_set)
-
-
-# 文本转向量
+# 将012a转成0、1、2、10
 def text2int(text):
     text_len = len(text)
-    if text_len > MAX_CAPTCHA:
+    if text_len != MAX_CAPTCHA:
         print("标注有误：", text)
-        raise ValueError("验证码最长4个字符")
+        raise ValueError("验证码长度不为MAX_CAPTCHA个字符")
 
     labels = [0] * text_len
     for i in range(text_len):
@@ -33,24 +33,32 @@ def text2int(text):
 
     return labels
 
-
+# 读取数据集相关信息
 def get_file(file_dir):
-    images = []
-    labels = []
+    train_images = []
+    train_labels = []
 
-    for file in os.listdir(file_dir):
-        images.append(os.path.join(file_dir, file))
-        labels.append(file.split(".")[0])
+    val_images = []
+    val_labels = []
 
-    # 这里的shuffle不一定需要，因为在后面训练时，tf.data有shuffle功能
-    temp = np.array([images, labels])
-    temp = temp.transpose()
-    np.random.shuffle(temp)
+    whole_files = os.listdir(file_dir)
+    for i, file in enumerate(whole_files):
+        if i % TRAIN_VAL_RATIO == 0:
+            val_images.append(os.path.join(file_dir, file))
+            val_labels.append(file.split(".")[0])  # 这里用文件名作为标注
+        else:
+            train_images.append(os.path.join(file_dir, file))
+            train_labels.append(file.split(".")[0])
 
-    image_list = list(temp[:, 0])
-    label_list = list(temp[:, 1])
+    # # 这里的shuffle不一定需要，因为在后面训练时，tf.data有shuffle功能
+    # temp = np.array([images, labels])
+    # temp = temp.transpose()
+    # np.random.shuffle(temp)
+    #
+    # image_list = list(temp[:, 0])
+    # label_list = list(temp[:, 1])
 
-    return image_list, label_list
+    return train_images, train_labels, val_images, val_labels
 
 
 def int64_feature(value):
@@ -63,15 +71,16 @@ def bytes_feature(value):
 
 def convert_to_tfrecord(images, labels, save_dir, name):
     filename = os.path.join(save_dir, name + ".tfrecords")
-    n_samples = len(labels)
+    num_samples = len(labels)
 
-    if len(images) != n_samples:
-        raise ValueError('Images size %d does not match label size %d' % (len(images), n_samples))
+    if len(images) != num_samples:
+        raise ValueError('Images size %d does not match label size %d' % (len(images), num_samples))
 
     writer = tf.python_io.TFRecordWriter(filename)
-    print("\nTransform start...")
+    print("Transform start...")
 
-    for i in range(n_samples):
+    num_real_samples = 0
+    for i in range(num_samples):
         try:
             image = io.imread(images[i])
             image_raw = image.tostring()
@@ -85,18 +94,27 @@ def convert_to_tfrecord(images, labels, save_dir, name):
             }))
 
             writer.write(example.SerializeToString())
+            num_real_samples += 1
         except IOError as e:
             print("Could not read ", images[i])
             print("error: ", e)
             print("Skip it!\n")
     writer.close()
     print("Transform done!")
+    return num_samples
 
 
-test_dir = "captcha/"
-images, labels = get_file(test_dir)
+if __name__ == "__main__":
+    dataset_dir = "ss/"
+    save_dir = "tfrecords_file/"
+    train_file_name = "captcha_train"  # tfrecords文件名
+    val_file_name = "captcha_val"
 
-save_dir = "./"
-name = "captcha_train"
-convert_to_tfrecord(images, labels, save_dir, name)
+    print("读取数据集文件中。。。")
+    train_images, train_labels, val_images, val_labels = get_file(dataset_dir)
+    print("制作train.tfrecords中。。。")
+    num1_train = convert_to_tfrecord(train_images, train_labels, save_dir, train_file_name)
+    print("制作val.tfrecords中。。。")
+    num_val = convert_to_tfrecord(val_images, val_labels, save_dir, val_file_name)
+    print("tfrecords文件制作完成，共有%d个训练集，%d个验证集" % (num1_train, num_val))
 
