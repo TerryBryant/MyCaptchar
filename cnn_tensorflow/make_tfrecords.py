@@ -106,7 +106,7 @@ if __name__ == "__main__":
     dataset_dir = "ss/"
     save_dir = "tfrecords_file/"
     train_file_name = "captcha_train"  # tfrecords文件名
-    val_file_name = "captcha_val"
+    val_file_name = "captcha_valid"
 
     print("读取数据集文件中。。。")
     train_images, train_labels, val_images, val_labels = get_file(dataset_dir)
