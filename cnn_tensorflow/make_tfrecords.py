@@ -1,9 +1,11 @@
 # 本脚本用于产生tfrecords文件
 # 输入训练集文件路径，并根据TRAIN_VAL_RATIO设置训练集和验证集的比例，
 # 得到相应的train.tfrecords和val.tfrecords
+# 本脚本用于产生tfrecords文件
+# 输入训练集文件路径，并根据TRAIN_VAL_RATIO设置训练集和验证集的比例，
+# 得到相应的train.tfrecords和val.tfrecords
 import tensorflow as tf
 import os
-import skimage.io as io
 
 TRAIN_VAL_RATIO = 10  # 训练集与验证集的比例
 MAX_CAPTCHA = 4  # 验证码长度为4
@@ -81,24 +83,20 @@ def convert_to_tfrecord(images, labels, save_dir, name):
 
     num_real_samples = 0
     for i in range(num_samples):
-        try:
-            image = io.imread(images[i])
-            image_raw = image.tostring()
-            label = text2int(labels[i])
-            example = tf.train.Example(features=tf.train.Features(feature={
-                'label0': int64_feature(label[0]),
-                'label1': int64_feature(label[1]),
-                'label2': int64_feature(label[2]),
-                'label3': int64_feature(label[3]),
-                'image_raw': bytes_feature(image_raw)
-            }))
+        with tf.gfile.FastGFile(images[i], "rb") as f:
+            image_encoded = f.read()
+        label = text2int(labels[i])
+        example = tf.train.Example(features=tf.train.Features(feature={
+            'label0': int64_feature(label[0]),
+            'label1': int64_feature(label[1]),
+            'label2': int64_feature(label[2]),
+            'label3': int64_feature(label[3]),
+            'image_encoded': bytes_feature(image_encoded)
+        }))
 
-            writer.write(example.SerializeToString())
-            num_real_samples += 1
-        except IOError as e:
-            print("Could not read ", images[i])
-            print("error: ", e)
-            print("Skip it!\n")
+        writer.write(example.SerializeToString())
+        num_real_samples += 1
+
     writer.close()
     print("Transform done!")
     return num_samples
