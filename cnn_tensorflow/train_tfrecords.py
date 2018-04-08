@@ -1,16 +1,18 @@
 #coding=utf8
 from __future__ import print_function
 import tensorflow as tf
-import os
 
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # 训练相关超参数
-BATCH_SIZE = 128
+# TRAIN_SIZE = 736
+# VALIDATION_SIZE = 82
+BATCH_SIZE = 32
+
 LEARNING_RATE = 0.001
-EPOCHS = 1
+EPOCHS = 50
 
 
 # 验证码相关信息
@@ -85,10 +87,10 @@ def _parse_function(proto):
                 'label1': tf.FixedLenFeature([], tf.int64),
                 'label2': tf.FixedLenFeature([], tf.int64),
                 'label3': tf.FixedLenFeature([], tf.int64),
-                'image_raw': tf.FixedLenFeature([], tf.string, default_value='')}
+                'image_encoded': tf.FixedLenFeature([], tf.string, default_value='')}
 
     parsed_feature = tf.parse_single_example(proto, features)
-    image = tf.decode_raw(parsed_feature['image_raw'], tf.uint8)  # 注意是tf.uint8，与制作tfrecords时的方式对应
+    image = tf.image.decode_image(parsed_feature['image_encoded'], channels=IMAGE_CHANNELS)
     image = tf.reshape(image, [IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS])
     image = tf.cast(image, dtype=tf.float32)  # 像素值需转换为float，后面送入卷积层参与计算
 
@@ -100,7 +102,7 @@ def _parse_function(proto):
     # image_label[3] = tf.cast(parsed_feature['label3'], tf.int32)
     # image_label = tf.one_hot(image_label, depth=CHAR_SET_LEN)
 
-    image_label0 = tf.cast(parsed_feature['label0'], tf.int32)
+    image_label0 = tf.cast(parsed_feature['label0'], tf.int32)  # 首先转为整型，再进行one hot编码
     image_label1 = tf.cast(parsed_feature['label1'], tf.int32)
     image_label2 = tf.cast(parsed_feature['label2'], tf.int32)
     image_label3 = tf.cast(parsed_feature['label3'], tf.int32)
@@ -117,8 +119,7 @@ def _parse_function(proto):
 
 def train_captcha_cnn():
     # 读取tfrecords数据
-    #dataset = tf.data.TFRecordDataset(filenames)
-    dataset = tf.data.TFRecordDataset("captcha_train.tfrecords")
+    dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.map(_parse_function, num_parallel_calls=16).shuffle(buffer_size=10000)
     dataset = dataset.batch(BATCH_SIZE).repeat(EPOCHS)
     iter = dataset.make_initializable_iterator()
@@ -144,40 +145,38 @@ def train_captcha_cnn():
         correct_pred = tf.equal(max_idx_p, max_idx_l)
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-
     # 开始训练
-    output_node_names = "x_input,x_predict,keep_prob"
+    output_node_names = "input/x_input,accuracy/x_predict,keep_prob"
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        # 训练EPOCHS轮
         global_step = 0
-        for epoch in range(EPOCHS):
-            #sess.run(iter.initializer, feed_dict={filenames: train_set})
-            sess.run(iter.initializer)
-            while True:
-                try:
-                    global_step += 1
-                    sess.run([X, Y])
-                    _, loss_ = sess.run([optimizer, loss], feed_dict={keep_prob: 0.75})
+        sess.run(iter.initializer, feed_dict={filenames: train_set})
+        while True:
+            try:
+                global_step += 1
+                # sess.run([X, Y])  # 这里千万不能再run了，因为它是optimizer的输入参数，所以直接run optimizer即可
+                a, _, loss_ = sess.run([X, optimizer, loss], feed_dict={keep_prob: 0.75})
+                # print(a[0, 0, 0])
+                # continue
 
-                    if global_step % 10 == 0:
-                        print("当前epoch：%d，训练步数：%d，损失：%f" % (epoch, global_step, loss_))
-                except tf.errors.OutOfRangeError:
-                    break
 
-            # 一个epoch跑完，计算此时的验证集的准确率
-            sess.run(iter.initializer, feed_dict={filenames: valid_set})
-            sess.run([X, Y])
-            acc = sess.run(accuracy, feed_dict={keep_prob: 1.})
-            print("当前epoch：%d，测试集准确率：%f" % (epoch, acc))
+                if global_step % 10 == 0:  # 每10步打印一次
+                    print("当前训练的步数：%d, loss：%s" % (global_step, loss_))
 
-            # 每个epoch保存一次模型
-            constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
-                                                                          output_node_names.split(','))
-            filename = "trained_model/frozen_model_%s.pb" % global_step
-            with tf.gfile.GFile(filename, "wb") as f:
-                f.write(constant_graph.SerializeToString())
+                if global_step % 100 == 0:  # 每100步打印验证集准确率
+                    sess.run(iter.initializer, feed_dict={filenames: valid_set})
+                    acc = sess.run(accuracy, feed_dict={keep_prob: 1.})
+                    print("当前训练的步数：%d，验证准确率为：%s" % (global_step, acc))
+
+                if global_step % 1000 == 0:  # 每1000步保存一次模型
+                    constant_graph = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def,
+                                                                                  output_node_names.split(','))
+                    filename = "trained_model/frozen_model_%s.pb" % global_step
+                    with tf.gfile.GFile(filename, "wb") as f:
+                        f.write(constant_graph.SerializeToString())
+            except tf.errors.OutOfRangeError:
+                break
 
 
 if __name__ == "__main__":
@@ -185,8 +184,8 @@ if __name__ == "__main__":
     filenames = tf.placeholder(tf.string, shape=None)     # tfrecorfds的文件名
 
     # tfrecords file name
-    train_set = tf.Variable("captcha_train.tfrecords", dtype=tf.string)
-    valid_set = tf.Variable("captcha_valid.tfrecords", dtype=tf.string)
-    # train_set = "captcha_train.tfrecords"
-    # valid_set = "captcha_valid.tfrecords"
+    # train_set = tf.Variable("captcha_train.tfrecords", dtype=tf.string)
+    # valid_set = tf.Variable("captcha_val.tfrecords", dtype=tf.string)
+    train_set = "tfrecords_file/captcha_train3.tfrecords"
+    valid_set = "tfrecords_file/captcha_valid3.tfrecords"
     train_captcha_cnn()
