@@ -155,10 +155,8 @@ def train_captcha_cnn():
         while True:
             try:
                 global_step += 1
-                # sess.run([X, Y])  # 这里千万不能再run了，因为它是optimizer的输入参数，所以直接run optimizer即可
-                a, _, loss_ = sess.run([X, optimizer, loss], feed_dict={keep_prob: 0.75})
-                # print(a[0, 0, 0])
-                # continue
+                # sess.run([X, Y])  # 这里再run的话就有问题了，会更run([optimizer, loss])重复，导致数据集只能遍历一半
+                _, loss_ = sess.run([optimizer, loss], feed_dict={keep_prob: 0.75})
 
 
                 if global_step % 10 == 0:  # 每10步打印一次
