@@ -15,7 +15,7 @@ flags.DEFINE_float('learning_rate', 0.001, 'Learning rate')
 flags.DEFINE_float('dropout_rate', 0.75, 'Dropout rate')
 flags.DEFINE_string('train_dataset', 'captcha_train.tfrecords', 'Filename of train dataset')
 flags.DEFINE_string('valid_dataset', 'captcha_valid.tfrecords', 'Filename of valid dataset')
-flags.DEFINE_string('model_dir', 'trained_model/lenet_captcha2', 'Filename of model ')
+flags.DEFINE_string('model_dir', 'trained_model/lenet_captcha', 'Filename of model ')
 
 flags.DEFINE_integer('CHAR_SET_LEN', CHAR_SET_LEN, 'Range of the words in captcha')
 flags.DEFINE_integer('MAX_CAPTCHA', 4, 'Lengh of the captcha')
@@ -143,7 +143,7 @@ def main(unused_argv):
         :return:
         '''
         train_dataset = tf.data.TFRecordDataset(FLAGS.train_dataset)
-        train_dataset = train_dataset.map(_parse_function)
+        train_dataset = train_dataset.map(_parse_function, num_parallel_calls=8)
         train_dataset = train_dataset.repeat(FLAGS.num_epochs)
         train_dataset = train_dataset.batch(FLAGS.batch_size)
         train_iterator = train_dataset.make_one_shot_iterator()
@@ -158,7 +158,7 @@ def main(unused_argv):
         :return:
         '''
         valid_dataset = tf.data.TFRecordDataset(FLAGS.valid_dataset)
-        valid_dataset = valid_dataset.map(_parse_function)
+        valid_dataset = valid_dataset.map(_parse_function, num_parallel_calls=8)
         # valid_dataset = valid_dataset.repeat(FLAGS.num_epochs)
         valid_dataset = valid_dataset.batch(FLAGS.batch_size)
         valid_dataset = valid_dataset.make_one_shot_iterator()
