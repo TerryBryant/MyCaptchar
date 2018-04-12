@@ -128,6 +128,7 @@ def _parse_function(proto):
     image = tf.image.decode_image(parsed_feature['image_encoded'], channels=FLAGS.IMAGE_CHANNELS)
     image = tf.reshape(image, [FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.IMAGE_CHANNELS])
     image = tf.cast(image, dtype=tf.float32)  # 像素值需转换为float，后面送入卷积层参与计算
+    image = tf.divide(tf.subtract(image, 128.0), 128.0)  # 图片标准化
 
     image_label0 = tf.cast(parsed_feature['label0'], tf.int32)  # 首先转为整型，再进行one hot编码
     image_label1 = tf.cast(parsed_feature['label1'], tf.int32)
