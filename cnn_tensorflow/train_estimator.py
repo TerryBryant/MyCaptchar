@@ -9,7 +9,7 @@ CHAR_SET_LEN = len(char_set)
 
 tf.logging.set_verbosity(tf.logging.INFO)
 flags = tf.app.flags
-flags.DEFINE_integer('num_epochs', 50, 'Number of traning epochs')
+flags.DEFINE_integer('num_epochs', 20, 'Number of traning epochs')
 flags.DEFINE_integer('batch_size', 64, 'Batch size')
 flags.DEFINE_float('learning_rate', 0.001, 'Learning rate')
 flags.DEFINE_float('dropout_rate', 0.75, 'Dropout rate')
@@ -52,12 +52,21 @@ def lenet_model_fn(features, labels, mode):
     # drop out2
     x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout2')
 
+    # 卷积层3
+    x = tf.layers.conv2d(inputs=x, filters=128, kernel_size=[3, 3],
+                         padding='same', activation=tf.nn.relu, name='conv3')
+    # 池化层3
+    x = tf.layers.max_pooling2d(inputs=x, pool_size=[2, 2], strides=2,
+                                padding='same', name='pool3')
+    # drop out3
+    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout3')
+
     # 全连接层1
-    x = tf.reshape(x, [-1, 9 * 17 * 64])
+    x = tf.reshape(x, [-1, 5 * 9 * 128])
     x = tf.layers.dense(inputs=x, units=1024, activation=tf.nn.relu, name='dense')
 
     # drop out3
-    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout3')
+    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout4')
 
     logits = tf.layers.dense(inputs=x, units=FLAGS.MAX_CAPTCHA * FLAGS.CHAR_SET_LEN, name='final')
 
