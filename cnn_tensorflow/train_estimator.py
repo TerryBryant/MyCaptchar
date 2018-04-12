@@ -85,7 +85,7 @@ def lenet_model_fn(features, labels, mode):
 
     # 为了打印训练中的结果
     accuracy, update_op = tf.metrics.accuracy(
-        labels=labels, predictions=predictions['x_predict'], name='accuracy'
+        labels=max_idx_p, predictions=max_idx_l, name='accuracy'
     )
 
     tf.summary.scalar('batch_acc', batch_acc)
