@@ -11,11 +11,11 @@ tf.logging.set_verbosity(tf.logging.INFO)
 flags = tf.app.flags
 flags.DEFINE_integer('num_epochs', 50, 'Number of traning epochs')
 flags.DEFINE_integer('batch_size', 64, 'Batch size')
-flags.DEFINE_float('learning_rate', 0.01, 'Learning rate')
+flags.DEFINE_float('learning_rate', 0.001, 'Learning rate')
 flags.DEFINE_float('dropout_rate', 0.75, 'Dropout rate')
-flags.DEFINE_string('train_dataset', 'captcha_train3.tfrecords', 'Filename of train dataset')
-flags.DEFINE_string('valid_dataset', 'captcha_valid3.tfrecords', 'Filename of valid dataset')
-flags.DEFINE_string('model_dir', 'trained_model/lenet_captcha', 'Filename of model ')
+flags.DEFINE_string('train_dataset', 'captcha_train.tfrecords', 'Filename of train dataset')
+flags.DEFINE_string('valid_dataset', 'captcha_valid.tfrecords', 'Filename of valid dataset')
+flags.DEFINE_string('model_dir', 'trained_model/lenet_captcha2', 'Filename of model ')
 
 flags.DEFINE_integer('CHAR_SET_LEN', CHAR_SET_LEN, 'Range of the words in captcha')
 flags.DEFINE_integer('MAX_CAPTCHA', 4, 'Lengh of the captcha')
@@ -32,7 +32,7 @@ FLAGS = flags.FLAGS
 # 预测模式，即 mode == tf.estimator.ModeKeys.PREDICT，必须提供的是 predicitions。
 def lenet_model_fn(features, labels, mode):
     # 输入层
-    x = tf.reshape(features, shape=[-1, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, 1], name="x_input")
+    x = tf.reshape(features, shape=[-1, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.IMAGE_CHANNELS], name="x_input")
 
     # 卷积层1
     x = tf.layers.conv2d(inputs=x, filters=32, kernel_size=[3, 3],
@@ -41,7 +41,7 @@ def lenet_model_fn(features, labels, mode):
     x = tf.layers.max_pooling2d(inputs=x, pool_size=[2, 2], strides=2,
                                 padding='same', name='pool1')
     # drop out1
-    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate)
+    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout1')
 
     # 卷积层2
     x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3],
@@ -50,16 +50,16 @@ def lenet_model_fn(features, labels, mode):
     x = tf.layers.max_pooling2d(inputs=x, pool_size=[2, 2], strides=2,
                                 padding='same', name='pool2')
     # drop out2
-    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate)
+    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout2')
 
     # 全连接层1
     x = tf.reshape(x, [-1, 9 * 17 * 64])
     x = tf.layers.dense(inputs=x, units=1024, activation=tf.nn.relu, name='dense')
 
     # drop out3
-    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate)
+    x = tf.layers.dropout(inputs=x, rate=FLAGS.dropout_rate, name='dropout3')
 
-    logits = tf.layers.dense(inputs=x, units=FLAGS.MAX_CAPTCHA * CHAR_SET_LEN, name='final')
+    logits = tf.layers.dense(inputs=x, units=FLAGS.MAX_CAPTCHA * FLAGS.CHAR_SET_LEN, name='final')
 
     # 预测
     predictions = {
@@ -94,7 +94,7 @@ def lenet_model_fn(features, labels, mode):
     # 训练配置(对于train模式)
     if mode == tf.estimator.ModeKeys.TRAIN:
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=FLAGS.learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate)
         with tf.control_dependencies(update_ops):
             train_op = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
 
@@ -178,4 +178,3 @@ def main(unused_argv):
 
 if __name__ == "__main__":
     tf.app.run()
-
