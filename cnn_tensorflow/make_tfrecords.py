@@ -4,6 +4,10 @@
 # 本脚本用于产生tfrecords文件
 # 输入训练集文件路径，并根据TRAIN_VAL_RATIO设置训练集和验证集的比例，
 # 得到相应的train.tfrecords和val.tfrecords
+
+# Warning in 2019/06/05
+# 这个代码不适用于其它情况，因为没有考虑正负样本比例问题
+
 import tensorflow as tf
 import os
 
